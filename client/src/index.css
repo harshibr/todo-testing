@@ -10,3 +10,4 @@ li span { cursor: pointer; flex: 1; }
 .done { text-decoration: line-through; color: #9ca3af; }
 .del { background: transparent; color: #ef4444; padding: 4px 8px; }
 .empty { text-align: center; color: #9ca3af; }
+.clear { margin-top: 16px; background: #ef4444; }

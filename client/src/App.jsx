@@ -38,6 +38,13 @@ export default function App() {
     setTodos(todos.filter((t) => t._id !== id));
   };
 
+  const clearCompleted = async () => {
+    await fetch(`${API}/completed`, { method: 'DELETE' });
+    setTodos(todos.filter((t) => !t.completed));
+  };
+
+  const hasCompleted = todos.some((t) => t.completed);
+
   return (
     <div className="app">
       <h1>Todo List</h1>
@@ -55,6 +62,9 @@ export default function App() {
           </li>
         ))}
       </ul>
+      {hasCompleted && (
+        <button type="button" className="clear" onClick={clearCompleted}>Clear completed</button>
+      )}
       {todos.length === 0 && <p className="empty">No tasks yet.</p>}
     </div>
   );

@@ -20,6 +20,12 @@ router.put('/:id', async (req, res) => {
   res.json(todo);
 });
 
+// Must be registered before '/:id' so "completed" is not treated as an id.
+router.delete('/completed', async (req, res) => {
+  const result = await Todo.deleteMany({ completed: true });
+  res.json({ success: true, deletedCount: result.deletedCount });
+});
+
 router.delete('/:id', async (req, res) => {
   await Todo.findByIdAndDelete(req.params.id);
   res.json({ success: true });
