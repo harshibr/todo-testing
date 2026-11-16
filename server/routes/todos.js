@@ -15,7 +15,10 @@ router.post('/', async (req, res) => {
 });
 
 router.put('/:id', async (req, res) => {
-  const todo = await Todo.findByIdAndUpdate(req.params.id, req.body, { new: true });
+  if ('text' in req.body && (typeof req.body.text !== 'string' || !req.body.text.trim())) {
+    return res.status(400).json({ error: 'text is required' });
+  }
+  const todo = await Todo.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
   if (!todo) return res.status(404).json({ error: 'not found' });
   res.json(todo);
 });

@@ -18,3 +18,19 @@ test('DELETE /api/todos/completed removes only finished todos', async ({ request
 
   await request.delete(`/api/todos/${open._id}`);
 });
+
+test('PUT /api/todos/:id edits the text and rejects empty text', async ({ request }) => {
+  const tag = `edit-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const todo = await (await request.post('/api/todos', { data: { text: `${tag} old` } })).json();
+
+  const ok = await request.put(`/api/todos/${todo._id}`, { data: { text: `${tag} new` } });
+  expect(ok.ok()).toBeTruthy();
+  expect((await ok.json()).text).toBe(`${tag} new`);
+
+  const bad = await request.put(`/api/todos/${todo._id}`, { data: { text: '   ' } });
+  expect(bad.status()).toBe(400);
+  const after = await (await request.get('/api/todos')).json();
+  expect(after.find((t) => t._id === todo._id).text).toBe(`${tag} new`);
+
+  await request.delete(`/api/todos/${todo._id}`);
+});
