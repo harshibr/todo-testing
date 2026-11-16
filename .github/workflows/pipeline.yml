@@ -1,0 +1,91 @@
+# Seeded into the project as .github/workflows/pipeline.yml by scripts/load-project.sh. Adapt the lines marked ADAPT.
+#
+#   push to `staging` -> test -> deploy staging -> smoke test staging -> promote to `main` -> deploy live -> smoke test live
+#                                                                                              (automatic rollback if live smoke fails)
+#   pull request      -> test only
+# One-time GitHub setup: create branches `staging` and `main`; Settings > Actions > Workflow permissions = read and write;
+# add repository variables STAGING_URL, LIVE_URL and secrets (TEST_USER_EMAIL, TEST_USER_PASSWORD, deploy SSH key ...).
+# Want a human approval before live? Add required reviewers to the `production` environment.
+name: pipeline
+on:
+  pull_request:
+    branches: [staging, main]
+  push:
+    branches: [staging]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+      TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }          # ADAPT: your stack
+      - run: npm ci                                     # ADAPT
+      - run: npm test --if-present                      # unit tests
+      - run: npm run build --if-present
+      - name: Start app
+        run: |
+          (npm start &)                                 # ADAPT: start command
+          npx --yes wait-on http://127.0.0.1:3000/health  # ADAPT: port + health path
+      - name: Browser + API tests
+        working-directory: tests
+        env: { BASE_URL: "http://127.0.0.1:3000", HEALTH_PATH: "/health" }
+        run: |
+          npm ci || npm install
+          npx playwright install --with-deps chromium firefox
+          npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: playwright-report, path: tests/playwright-report }
+
+  deploy-staging:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # ADAPT: deploy to the staging server (SSH, rsync, docker, cloud CLI ...). Blue-green script: deploy/blue-green.sh
+      - run: echo "deploy ${{ github.sha }} to staging"
+      - name: Smoke test staging (read-only)
+        working-directory: tests
+        env: { BASE_URL: "${{ vars.STAGING_URL }}" }
+        run: |
+          npm ci || npm install
+          npx playwright install --with-deps chromium
+          npx playwright test --project=chromium --grep @smoke
+
+  promote:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Fast-forward main to the tested commit
+        run: git push origin ${{ github.sha }}:refs/heads/main
+
+  deploy-live:
+    needs: promote
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main }
+      # ADAPT: deploy to live. Blue-green keeps the old version running so rollback is instant.
+      - run: echo "deploy ${{ github.sha }} to live"
+      - name: Smoke test live (read-only)
+        id: smoke
+        working-directory: tests
+        env: { BASE_URL: "${{ vars.LIVE_URL }}" }
+        run: |
+          npm ci || npm install
+          npx playwright install --with-deps chromium
+          npx playwright test --project=chromium --grep @smoke
+      - name: Roll back live
+        if: failure()
+        run: echo "ADAPT: run deploy/blue-green.sh rollback on the live server"

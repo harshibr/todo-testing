@@ -1,0 +1,13 @@
+{
+  "name": "project-tests",
+  "private": true,
+  "type": "module",
+  "description": "Browser + API test cases. Lives in the project and is pushed with it.",
+  "scripts": {
+    "test": "playwright test",
+    "test:api": "playwright test --project=api",
+    "test:e2e": "playwright test --project=chromium --project=firefox",
+    "test:smoke": "playwright test --project=chromium --grep @smoke"
+  },
+  "devDependencies": { "@playwright/test": "^1.49.0" }
+}
