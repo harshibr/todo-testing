@@ -1,14 +1,16 @@
 # Generated for this project by scripts/seed-pipeline.sh (project names, ports and commands are filled in).
 #
-#  push to staging ->  1 TEST          unit + API + browser tests on a clean GitHub machine
+#  push to staging ->  1 TEST          integrity + security checks, then unit + API + browser tests (same as the local gate)
 #                          2 STAGING       deploy to the staging server, then run the FULL API + browser tests against it
-#                          3 PROMOTE       fast-forward master to the tested commit
+#                          3 PROMOTE       merge the tested commit into master
 #                          4 LIVE          deploy to the live server, then run ONLY read-only @smoke tests against it
 #                          5 ROLLBACK      if the live smoke test fails
 #  pull request         ->  1 TEST only
 #
-# Stages 2-5 switch themselves on when you add the GitHub repository variables STAGING_URL / LIVE_URL
-# (Settings > Secrets and variables > Actions > Variables). Until then only TEST runs, so nothing half-configured can release.
+# NO-SERVERS MODE: while the repository variable STAGING_URL does not exist, stage 2 is skipped and stage 3 runs right after
+# TEST passes (the tests are then the only gate). As soon as you add STAGING_URL the full flow above applies automatically.
+# Stages 2, 4, 5 switch themselves on when you add the GitHub repository variables STAGING_URL / LIVE_URL
+# (Settings > Secrets and variables > Actions > Variables).
 name: pipeline
 on:
   pull_request:
@@ -31,8 +33,19 @@ jobs:
       TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
+      - name: Test integrity (code changes need tests; no test deleted, skipped or weakened)
+        env: { BASE: "${{ github.event.pull_request.base.sha || github.event.before }}" }
+        run: |
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then BASE="$(git rev-parse HEAD~1 2>/dev/null || true)"; fi
+          if [ -n "$BASE" ]; then AIDEV_BASE="$BASE" bash .github/ci/integrity.sh; else echo "first commit: nothing to compare"; fi
+      - name: Security check (secrets, tracked .env files, dependency audit)
+        env: { BASE: "${{ github.event.pull_request.base.sha || github.event.before }}" }
+        run: |
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then BASE="$(git rev-parse HEAD~1 2>/dev/null || true)"; fi
+          AIDEV_BASE="${BASE:-HEAD}" bash .github/ci/security.sh
       - name: Install dependencies
         run: bash .github/ci/install.sh
       - name: Unit tests
@@ -79,13 +92,28 @@ jobs:
         with: { name: staging-report, path: tests/playwright-report }
 
   promote:
-    needs: deploy-staging
+    # runs when: TEST passed AND (staging deploy+tests passed, OR there is no staging server configured)
+    if: >-
+      always() && github.event_name == 'push' && needs.test.result == 'success' &&
+      (needs.deploy-staging.result == 'success' || (needs.deploy-staging.result == 'skipped' && vars.STAGING_URL == ''))
+    needs: [test, deploy-staging]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - name: Fast-forward master to the commit that passed staging
-        run: git push origin ${{ github.sha }}:refs/heads/master
+      - name: Merge the tested commit into master
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin master
+          git checkout -B master origin/master
+          if git merge-base --is-ancestor "${{ github.sha }}" HEAD; then echo "master already contains this commit"; exit 0; fi
+          git merge --no-edit -m "Promote ${{ github.sha }} from staging (tests passed)" "${{ github.sha }}" || {
+            git merge --abort
+            echo "::error::staging conflicts with master. Merge master into staging (scripts/branch-setup.sh does this) and push again."
+            exit 1
+          }
+          git push origin master
 
   deploy-live:
     if: vars.LIVE_URL != ''
