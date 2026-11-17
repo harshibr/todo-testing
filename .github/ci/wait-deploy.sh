@@ -11,10 +11,18 @@ fail() { echo "::error::$*"; exit 1; }
 
 # 1. API (Render): /api/health reports the commit it runs. The free plan sleeps, so the first call can take ~1 minute.
 if [ -n "$API" ]; then
-  echo "Waiting for the API ($API) to run ${API_SHA:0:7} (last commit that changed $API_PATH/; pushed commit is ${SHA:0:7}) ..."
+  echo "Waiting for the API ($API) to run ${API_SHA:0:7} (or a later one; last commit that changed $API_PATH/, pushed commit is ${SHA:0:7}) ..."
   for i in $(seq 1 60); do
     got="$(curl -s -m 90 "$API/api/health" | sed -n 's/.*"commit":"\([0-9a-f]*\)".*/\1/p')"
-    [ "$got" = "$API_SHA" ] && { echo "API is running ${API_SHA:0:7}"; break; }
+    # OK when the API runs that commit or any LATER one (some Render services redeploy on every push, others only when the API folder changed)
+    if [ -n "$got" ]; then
+      rel="$([ "$got" = "$API_SHA" ] && echo identical || gh api "repos/$GITHUB_REPOSITORY/compare/$API_SHA...$got" --jq .status 2>/dev/null)"
+      if [ "$rel" = identical ] || [ "$rel" = ahead ]; then
+        echo "API is running ${got:0:7}, which includes ${API_SHA:0:7}"
+        [ -n "${GITHUB_ENV:-}" ] && echo "EXPECT_COMMIT=$got" >> "$GITHUB_ENV"
+        break
+      fi
+    fi
     echo "  [$i] API reports: ${got:-nothing yet}"; sleep 15
     [ "$i" = 60 ] && fail "API did not report commit $API_SHA within ~15 minutes (is Render auto-deploy on for this branch?)"
   done
