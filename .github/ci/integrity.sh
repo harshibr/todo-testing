@@ -9,6 +9,23 @@ cd "$CODE_DIR"; bad=0; BASE="${AIDEV_BASE:-HEAD}"
 TESTRE='(^|/)(tests?|__tests__|e2e|spec)/|\.(test|spec)\.[jt]sx?$|_test\.(py|go)$|(^|/)test_[^/]*\.py$'
 OTHERRE='\.(md|txt)$|^docs/|^\.github/|package-lock\.json$|\.lock$|(^|/)\.gitignore$|^LICENSE'
 
+# A ROLLBACK commit (made by scripts/release.sh rollback) may remove what it undoes, including that change's tests.
+# It is accepted ONLY if its files are exactly the files of an earlier commit named in its message, so nothing new can hide in it.
+is_rollback() { # commit
+  local c="$1" subj prev
+  subj="$(git log -1 --format=%s "$c" 2>/dev/null)"
+  [[ "$subj" =~ ^Rollback:\ return\ to\ ([0-9a-f]{7,40}) ]] || return 1
+  prev="${BASH_REMATCH[1]}"
+  git rev-parse --verify -q "$prev^{commit}" >/dev/null || return 1
+  git merge-base --is-ancestor "$prev" "$c" || return 1
+  [ "$(git rev-parse "$c^{tree}")" = "$(git rev-parse "$prev^{tree}")" ]
+}
+if git diff --quiet HEAD 2>/dev/null && [ -z "$(git ls-files --others --exclude-standard)" ]; then
+  if is_rollback HEAD || { git rev-parse --verify -q HEAD^2 >/dev/null && is_rollback HEAD^2; }; then
+    ok "TEST INTEGRITY PASSED (rollback commit: identical to an earlier verified version, or merges one)"; exit 0
+  fi
+fi
+
 changed=$( { git diff --name-only "$BASE"; git ls-files --others --exclude-standard; } | sort -u )
 [ -n "$changed" ] || { ok "no changes"; exit 0; }
 tests_changed=$(echo "$changed" | grep -E "$TESTRE" | grep -vE '(^|/)(helpers/fixtures\.js|playwright\.config\.js|package(-lock)?\.json)$' || true)
