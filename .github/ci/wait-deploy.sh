@@ -15,15 +15,15 @@ if [ -n "$API" ]; then
   done
 fi
 
-# 2. Website (Vercel): GitHub records a deployment per commit; wait for its status to be success.
+# 2. Website (Vercel): Vercel reports its result on the commit as a status named "Vercel" (and sometimes as a GitHub deployment).
 echo "Waiting for the website deployment of ${SHA:0:7} ..."
 for i in $(seq 1 40); do
-  state=""
-  for id in $(gh api "repos/$GITHUB_REPOSITORY/deployments?sha=$SHA" --jq '.[].id' 2>/dev/null); do
-    st="$(gh api "repos/$GITHUB_REPOSITORY/deployments/$id/statuses" --jq '.[0].state' 2>/dev/null)"
-    [ "$st" = success ] && state=success
-    [ -z "$state" ] && state="$st"
-  done
+  state="$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/status" --jq '[.statuses[] | select(.context | startswith("Vercel")) | select(.context | contains("Comments") | not)] | .[0].state // ""' 2>/dev/null)"
+  if [ -z "$state" ]; then
+    for id in $(gh api "repos/$GITHUB_REPOSITORY/deployments?sha=$SHA" --jq '.[].id' 2>/dev/null); do
+      state="$(gh api "repos/$GITHUB_REPOSITORY/deployments/$id/statuses" --jq '.[0].state' 2>/dev/null)"
+    done
+  fi
   echo "  [$i] website deployment: ${state:-none yet}"
   [ "$state" = success ] && { echo "Website deployment finished"; break; }
   case "$state" in failure|error) fail "Vercel deployment of $SHA failed" ;; esac
