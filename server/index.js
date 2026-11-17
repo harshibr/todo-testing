@@ -6,7 +6,6 @@ const mongoose = require('mongoose');
 const app = express();
 app.use(cors({ origin: process.env.CLIENT_URL ? process.env.CLIENT_URL.split(',') : true }));
 app.use(express.json());
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/api/todos', require('./routes/todos'));
 app.use('/api/health', require('./routes/health'));
 
