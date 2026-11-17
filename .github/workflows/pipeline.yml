@@ -1,25 +1,24 @@
 # Generated for this project by scripts/seed-pipeline.sh (project names, ports and commands are filled in).
 #
-#  push to staging ->  1 TEST          integrity + security checks, then unit + API + browser tests (same as the local gate)
-#                          2 STAGING       deploy to the staging server, then run the FULL API + browser tests against it
-#                          3 PROMOTE       merge the tested commit into master
-#                          4 LIVE          deploy to the live server, then run ONLY read-only @smoke tests against it
-#                          5 ROLLBACK      if the live smoke test fails
-#  pull request         ->  1 TEST only
+#  Nothing here releases by itself: the developer instructs it (scripts/release.sh staging | production | both).
 #
-# NO-SERVERS MODE: while the repository variable STAGING_URL does not exist, stage 2 is skipped and stage 3 runs right after
-# TEST passes (the tests are then the only gate). As soon as you add STAGING_URL the full flow above applies automatically.
-# Stages 2, 4, 5 switch themselves on when you add the GitHub repository variables STAGING_URL / LIVE_URL
-# (Settings > Secrets and variables > Actions > Variables).
+#  push to staging (on instruction)  ->  1 TEST          integrity + security checks, unit + API + browser tests on a clean GitHub machine
+#                                            2 DEPLOY-STAGING deploy to the staging server + FULL API/browser tests there (needs repository variable STAGING_URL)
+#  push to master = "move to production" ->  1 TEST          (the same commit was already green on staging; re-checked)
+#                                            2 DEPLOY-LIVE    deploy to the live server, then ONLY read-only @smoke tests; roll back if they fail (needs LIVE_URL)
+#  pull request                          ->  1 TEST only
+#
+# Stages that need a server switch themselves on when you add the repository variables STAGING_URL / LIVE_URL
+# (Settings > Secrets and variables > Actions > Variables). Without LIVE_URL, "production" simply means the master branch is updated.
 name: pipeline
 on:
   pull_request:
     branches: [staging, master]
   push:
-    branches: [staging]
+    branches: [staging, master]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
@@ -66,7 +65,7 @@ jobs:
         with: { name: playwright-report, path: tests/playwright-report, if-no-files-found: ignore }
 
   deploy-staging:
-    if: github.event_name == 'push' && vars.STAGING_URL != ''
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging' && vars.STAGING_URL != ''
     needs: test
     runs-on: ubuntu-latest
     steps:
@@ -91,38 +90,13 @@ jobs:
         if: failure()
         with: { name: staging-report, path: tests/playwright-report }
 
-  promote:
-    # runs when: TEST passed AND (staging deploy+tests passed, OR there is no staging server configured)
-    if: >-
-      always() && github.event_name == 'push' && needs.test.result == 'success' &&
-      (needs.deploy-staging.result == 'success' || (needs.deploy-staging.result == 'skipped' && vars.STAGING_URL == ''))
-    needs: [test, deploy-staging]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      - name: Merge the tested commit into master
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin master
-          git checkout -B master origin/master
-          if git merge-base --is-ancestor "${{ github.sha }}" HEAD; then echo "master already contains this commit"; exit 0; fi
-          git merge --no-edit -m "Promote ${{ github.sha }} from staging (tests passed)" "${{ github.sha }}" || {
-            git merge --abort
-            echo "::error::staging conflicts with master. Merge master into staging (scripts/branch-setup.sh does this) and push again."
-            exit 1
-          }
-          git push origin master
-
   deploy-live:
-    if: vars.LIVE_URL != ''
-    needs: promote
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.LIVE_URL != ''
+    needs: test
     runs-on: ubuntu-latest
     environment: production        # add "required reviewers" to this environment in GitHub if you want a human OK before live
     steps:
       - uses: actions/checkout@v4
-        with: { ref: master }
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       # ADAPT: deploy to live. Blue-green keeps the old version running so rollback is instant.

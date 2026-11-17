@@ -21,5 +21,5 @@ test('clear completed deletes finished todos and keeps open ones', async ({ page
   await expect(page.getByText(doneText)).toHaveCount(0);
   await expect(page.getByText(openText)).toBeVisible();
 
-  await page.getByText(openText).locator('..').getByRole('button').click();
+  await page.getByText(openText).locator('..').getByRole('button', { name: 'Delete' }).click();
 });

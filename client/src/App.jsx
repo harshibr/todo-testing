@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const API = '/api/todos';
 
@@ -7,7 +7,6 @@ export default function App() {
   const [text, setText] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState('');
-  const clickTimer = useRef(null);
 
   useEffect(() => {
     fetch(API).then((r) => r.json()).then(setTodos);
@@ -36,14 +35,7 @@ export default function App() {
     setTodos(todos.map((t) => (t._id === updated._id ? updated : t)));
   };
 
-  // Delay the toggle so a double-click (edit) does not also toggle completion.
-  const onTextClick = (todo) => {
-    clearTimeout(clickTimer.current);
-    clickTimer.current = setTimeout(() => toggle(todo), 250);
-  };
-
   const startEdit = (todo) => {
-    clearTimeout(clickTimer.current);
     setEditingId(todo._id);
     setEditText(todo.text);
   };
@@ -102,14 +94,18 @@ export default function App() {
             ) : (
               <span
                 className={t.completed ? 'done' : ''}
-                title="Click to toggle, double-click to edit"
-                onClick={() => onTextClick(t)}
-                onDoubleClick={() => startEdit(t)}
+                title="Click to toggle"
+                onClick={() => toggle(t)}
               >
                 {t.text}
               </span>
             )}
-            <button className="del" onClick={() => remove(t._id)}>✕</button>
+            <span className="actions">
+              {editingId !== t._id && (
+                <button type="button" className="icon" aria-label="Edit" title="Edit" onClick={() => startEdit(t)}>✎</button>
+              )}
+              <button type="button" className="del" aria-label="Delete" title="Delete" onClick={() => remove(t._id)}>✕</button>
+            </span>
           </li>
         ))}
       </ul>

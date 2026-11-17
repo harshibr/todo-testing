@@ -1,6 +1,6 @@
 import { test, expect } from '../helpers/fixtures.js';
 
-test('double-click edits a todo, persists it, and Escape cancels', async ({ page, uid }) => {
+test('edit button edits a todo, persists it, and Escape cancels', async ({ page, uid }) => {
   await page.goto('/');
   const original = `orig-${uid}`;
   const renamed = `renamed-${uid}`;
@@ -9,13 +9,13 @@ test('double-click edits a todo, persists it, and Escape cancels', async ({ page
   await expect(page.getByText(original)).toBeVisible();
 
   // Escape cancels
-  await page.getByText(original).dblclick();
+  await page.getByText(original).locator('..').getByRole('button', { name: 'Edit', exact: true }).click();
   await page.getByLabel('Edit task').fill('should-not-save');
   await page.getByLabel('Edit task').press('Escape');
   await expect(page.getByText(original)).toBeVisible();
 
   // Enter saves
-  await page.getByText(original).dblclick();
+  await page.getByText(original).locator('..').getByRole('button', { name: 'Edit', exact: true }).click();
   await page.getByLabel('Edit task').fill(renamed);
   await page.getByLabel('Edit task').press('Enter');
   await expect(page.getByText(renamed)).toBeVisible();
@@ -26,5 +26,5 @@ test('double-click edits a todo, persists it, and Escape cancels', async ({ page
   await expect(page.getByText(renamed)).toBeVisible();
   await expect(page.locator('span.done', { hasText: renamed })).toHaveCount(0);
 
-  await page.getByText(renamed).locator('..').getByRole('button').click();
+  await page.getByText(renamed).locator('..').getByRole('button', { name: 'Delete' }).click();
 });

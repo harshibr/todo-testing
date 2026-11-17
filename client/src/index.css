@@ -8,6 +8,9 @@ ul { list-style: none; padding: 0; margin: 16px 0 0; }
 li { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; }
 li span { cursor: pointer; flex: 1; }
 .done { text-decoration: line-through; color: #9ca3af; }
+.actions { display: flex; gap: 4px; flex: 0 0 auto; }
+li .actions { cursor: default; flex: 0 0 auto; }
+.icon { background: transparent; color: #2563eb; padding: 4px 8px; }
 .del { background: transparent; color: #ef4444; padding: 4px 8px; }
 .empty { text-align: center; color: #9ca3af; }
 .clear { margin-top: 16px; background: #ef4444; }
