@@ -4,8 +4,9 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: process.env.CLIENT_URL ? process.env.CLIENT_URL.split(',') : true }));
 app.use(express.json());
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/api/todos', require('./routes/todos'));
 app.use('/api/health', require('./routes/health'));
 
@@ -13,7 +14,7 @@ mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
     console.log('MongoDB connected');
-    app.listen(process.env.PORT, () =>
+    app.listen(process.env.PORT || 5000, () =>
       console.log(`Server running on http://localhost:${process.env.PORT}`)
     );
   })
