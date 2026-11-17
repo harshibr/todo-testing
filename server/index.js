@@ -7,6 +7,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use('/api/todos', require('./routes/todos'));
+app.use('/api/health', require('./routes/health'));
 
 mongoose
   .connect(process.env.MONGO_URI)
