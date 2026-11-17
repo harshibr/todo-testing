@@ -11,12 +11,18 @@ router.post('/', async (req, res) => {
   if (!req.body.text || !req.body.text.trim()) {
     return res.status(400).json({ error: 'text is required' });
   }
-  res.status(201).json(await Todo.create({ text: req.body.text }));
+  if ('description' in req.body && typeof req.body.description !== 'string') {
+    return res.status(400).json({ error: 'description must be a string' });
+  }
+  res.status(201).json(await Todo.create({ text: req.body.text, description: req.body.description || '' }));
 });
 
 router.put('/:id', async (req, res) => {
   if ('text' in req.body && (typeof req.body.text !== 'string' || !req.body.text.trim())) {
     return res.status(400).json({ error: 'text is required' });
+  }
+  if ('description' in req.body && typeof req.body.description !== 'string') {
+    return res.status(400).json({ error: 'description must be a string' });
   }
   const todo = await Todo.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
   if (!todo) return res.status(404).json({ error: 'not found' });

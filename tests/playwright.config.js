@@ -2,6 +2,9 @@ import { defineConfig, devices } from '@playwright/test';
 
 // BASE_URL decides where tests run: dev app, staging or live (scripts/run-tests.sh --target ..., or CI).
 const baseURL = process.env.BASE_URL || 'http://127.0.0.1:3000';
+// API_URL: where the API lives when it is NOT on the same address as the page (e.g. page on Vercel, API on Render).
+// Empty = same address as BASE_URL (local dev, CI).
+const apiURL = process.env.API_URL || baseURL;
 
 export default defineConfig({
   testDir: '.',
@@ -12,7 +15,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
   use: { baseURL, headless: true, trace: 'retain-on-failure', screenshot: 'only-on-failure', video: 'retain-on-failure' },
   projects: [
-    { name: 'api', testMatch: 'api/**/*.spec.js' },
+    { name: 'api', testMatch: 'api/**/*.spec.js', use: { baseURL: apiURL } },
     { name: 'chromium', testMatch: 'e2e/**/*.spec.js', use: { ...devices['Desktop Chrome'] } },
     { name: 'firefox', testMatch: 'e2e/**/*.spec.js', use: { ...devices['Desktop Firefox'] } },
   ],

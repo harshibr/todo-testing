@@ -19,6 +19,7 @@ on:
 
 permissions:
   contents: read
+  deployments: read      # to see when Vercel has finished deploying a commit
 
 jobs:
   test:
@@ -68,47 +69,70 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/staging' && vars.STAGING_URL != ''
     needs: test
     runs-on: ubuntu-latest
+    env:
+      SITE: ${{ vars.STAGING_URL }}
+      API: ${{ vars.STAGING_API_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      # ADAPT: put the real deploy here (SSH, rsync, docker, a hosting CLI ...).  e.g.:  ssh deploy@staging 'cd app && deploy/blue-green.sh deploy ${{ github.sha }}'
-      - name: Deploy to staging
-        run: echo "ADAPT - deploy ${{ github.sha }} to ${{ vars.STAGING_URL }}"
-      - name: FULL tests on staging (API + browsers; staging data is disposable)
+      # Vercel and Render deploy by themselves when staging is pushed. We wait until BOTH run exactly this commit.
+      - name: Wait for the deploy (Vercel site + Render API run this commit)
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: bash .github/ci/wait-deploy.sh "$SITE" "$API" "${{ github.sha }}"
+      - name: FULL tests on the real staging (API + browsers; staging data is disposable)
         working-directory: tests
         env:
           BASE_URL: ${{ vars.STAGING_URL }}
-          HEALTH_PATH: "/api/todos"
+          API_URL: ${{ vars.STAGING_API_URL }}
+          EXPECT_COMMIT: ${{ github.sha }}
+          HEALTH_PATH: "/api/health"
+          PLAYWRIGHT_JSON_OUTPUT_NAME: results.json
           TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
           TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
         run: |
           npm install --no-audit --no-fund
           npx playwright install --with-deps chromium firefox
-          npx playwright test
+          npx playwright test --reporter=list,html,json
+      - name: Test proof (summary on the run page)
+        if: always()
+        run: bash .github/ci/summary.sh "STAGING" "$SITE" "$API" "${{ github.sha }}" tests/results.json >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
-        if: failure()
-        with: { name: staging-report, path: tests/playwright-report }
+        if: always()
+        with: { name: staging-report, path: tests/playwright-report, if-no-files-found: ignore }
 
   deploy-live:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.LIVE_URL != ''
     needs: test
     runs-on: ubuntu-latest
     environment: production        # add "required reviewers" to this environment in GitHub if you want a human OK before live
+    env:
+      SITE: ${{ vars.LIVE_URL }}
+      API: ${{ vars.LIVE_API_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      # ADAPT: deploy to live. Blue-green keeps the old version running so rollback is instant.
-      - name: Deploy to live
-        run: echo "ADAPT - deploy ${{ github.sha }} to ${{ vars.LIVE_URL }}"
+      - name: Wait for the deploy (Vercel site + Render API run this commit)
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: bash .github/ci/wait-deploy.sh "$SITE" "$API" "${{ github.sha }}"
       - name: READ-ONLY smoke tests on live (only tests tagged @smoke; they never change data)
         working-directory: tests
-        env: { BASE_URL: "${{ vars.LIVE_URL }}" }
+        env:
+          BASE_URL: ${{ vars.LIVE_URL }}
+          API_URL: ${{ vars.LIVE_API_URL }}
+          EXPECT_COMMIT: ${{ github.sha }}
+          PLAYWRIGHT_JSON_OUTPUT_NAME: results.json
         run: |
           npm install --no-audit --no-fund
           npx playwright install --with-deps chromium
-          npx playwright test --project=chromium --grep @smoke
-      - name: Roll back live
+          npx playwright test --project=api --project=chromium --grep "@smoke|commit that was just deployed" --reporter=list,html,json
+      - name: Test proof (summary on the run page)
+        if: always()
+        run: bash .github/ci/summary.sh "LIVE (read-only smoke)" "$SITE" "$API" "${{ github.sha }}" tests/results.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: live-report, path: tests/playwright-report, if-no-files-found: ignore }
+      - name: If live is broken
         if: failure()
-        run: echo "ADAPT - on the live server run deploy/blue-green.sh rollback"
+        run: echo "::error::Live smoke tests failed. Roll back now with scripts/release.sh rollback production (and redeploy the previous version in Vercel or Render if needed)."

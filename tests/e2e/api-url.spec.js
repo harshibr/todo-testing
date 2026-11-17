@@ -1,6 +1,6 @@
 import { test, expect } from '../helpers/fixtures.js';
 
-test('UI loads and saves todos through the default same-origin /api/todos', async ({ page, uid }) => {
+test('UI loads and saves todos through the configured API (same origin, or API_URL when the API is hosted separately)', async ({ page, uid }) => {
   const calls = [];
   page.on('request', (r) => { if (r.url().includes('/api/todos')) calls.push(new URL(r.url()).origin); });
   await page.goto('/');
@@ -11,7 +11,8 @@ test('UI loads and saves todos through the default same-origin /api/todos', asyn
   await page.reload();
   await expect(page.getByText(text)).toBeVisible();
   expect(calls.length).toBeGreaterThan(0);
-  expect(new Set(calls)).toEqual(new Set([new URL(page.url()).origin]));
+  const expected = process.env.API_URL ? new URL(process.env.API_URL).origin : new URL(page.url()).origin;
+  expect(new Set(calls)).toEqual(new Set([expected]));
   await page.getByText(text).locator('..').getByRole('button', { name: /delete/i }).click();
   await expect(page.getByText(text)).toHaveCount(0);
 });
