@@ -85,7 +85,6 @@ jobs:
         env:
           BASE_URL: ${{ vars.STAGING_URL }}
           API_URL: ${{ vars.STAGING_API_URL }}
-          EXPECT_COMMIT: ${{ github.sha }}
           HEALTH_PATH: "/api/health"
           PLAYWRIGHT_JSON_OUTPUT_NAME: results.json
           TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
@@ -121,7 +120,6 @@ jobs:
         env:
           BASE_URL: ${{ vars.LIVE_URL }}
           API_URL: ${{ vars.LIVE_API_URL }}
-          EXPECT_COMMIT: ${{ github.sha }}
           PLAYWRIGHT_JSON_OUTPUT_NAME: results.json
         run: |
           npm install --no-audit --no-fund

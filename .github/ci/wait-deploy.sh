@@ -2,16 +2,21 @@
 # Wait until the hosted site (Vercel) and API (Render) are running the commit that was just pushed.
 #   wait-deploy.sh <site-url> <api-url> <sha>        needs GH_TOKEN and GITHUB_REPOSITORY
 SITE="$1"; API="${2:-}"; SHA="$3"
+# Render only redeploys when the API folder changed, so the API must run the LAST commit that touched it (not necessarily this one).
+API_PATH="${API_PATH:-server}"
+API_SHA="$(gh api "repos/$GITHUB_REPOSITORY/commits?sha=$SHA&path=$API_PATH&per_page=1" --jq '.[0].sha // ""' 2>/dev/null)"
+API_SHA="${API_SHA:-$SHA}"
+[ -n "${GITHUB_ENV:-}" ] && echo "EXPECT_COMMIT=$API_SHA" >> "$GITHUB_ENV"
 fail() { echo "::error::$*"; exit 1; }
 
 # 1. API (Render): /api/health reports the commit it runs. The free plan sleeps, so the first call can take ~1 minute.
 if [ -n "$API" ]; then
-  echo "Waiting for the API ($API) to run ${SHA:0:7} ..."
+  echo "Waiting for the API ($API) to run ${API_SHA:0:7} (last commit that changed $API_PATH/; pushed commit is ${SHA:0:7}) ..."
   for i in $(seq 1 60); do
     got="$(curl -s -m 90 "$API/api/health" | sed -n 's/.*"commit":"\([0-9a-f]*\)".*/\1/p')"
-    [ "$got" = "$SHA" ] && { echo "API is running ${SHA:0:7}"; break; }
+    [ "$got" = "$API_SHA" ] && { echo "API is running ${API_SHA:0:7}"; break; }
     echo "  [$i] API reports: ${got:-nothing yet}"; sleep 15
-    [ "$i" = 60 ] && fail "API did not report commit $SHA within ~15 minutes (is Render auto-deploy on for this branch?)"
+    [ "$i" = 60 ] && fail "API did not report commit $API_SHA within ~15 minutes (is Render auto-deploy on for this branch?)"
   done
 fi
 
