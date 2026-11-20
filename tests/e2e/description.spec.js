@@ -1,7 +1,8 @@
 import { test, expect } from '../helpers/fixtures.js';
+import { registerAndLogin } from '../helpers/auth.js';
 
 test('add a todo with a description, see the counter, edit the description', async ({ page, uid }) => {
-  await page.goto('/');
+  await registerAndLogin(page, { email: `u-${uid}@test.test` });
   const title = `desc-title-${uid}`;
   const note = `desc-note-${uid}`;
   const note2 = `desc-note2-${uid}`;

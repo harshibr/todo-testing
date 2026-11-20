@@ -1,7 +1,8 @@
 import { test, expect } from '../helpers/fixtures.js';
+import { registerAndLogin } from '../helpers/auth.js';
 
 test('clear completed deletes finished todos and keeps open ones', async ({ page, uid }) => {
-  await page.goto('/');
+  await registerAndLogin(page, { email: `u-${uid}@test.test` });
   const add = async (text) => {
     await page.getByPlaceholder('Add a task...').fill(text);
     await page.getByRole('button', { name: 'Add', exact: true }).click();

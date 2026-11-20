@@ -2,6 +2,11 @@
 import { test, expect } from '@playwright/test';
 
 test('health endpoint answers', async ({ request }) => {
-  const res = await request.get(process.env.HEALTH_PATH || '/');
-  expect(res.ok()).toBeTruthy();
+  // The /api/health route is always public and must answer 200.
+  // The HEALTH_PATH env var may point to an auth-protected route (401 = server is up but requires auth).
+  const path = process.env.HEALTH_PATH || '/api/health';
+  const res = await request.get(path);
+  expect(res.ok() || res.status() === 401).toBeTruthy();
+  const health = await request.get('/api/health');
+  expect(health.ok()).toBeTruthy();
 });

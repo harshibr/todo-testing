@@ -1,7 +1,8 @@
 import { test, expect } from '../helpers/fixtures.js';
+import { registerAndLogin } from '../helpers/auth.js';
 
 test('edit button edits a todo, persists it, and Escape cancels', async ({ page, uid }) => {
-  await page.goto('/');
+  await registerAndLogin(page, { email: `u-${uid}@test.test` });
   const original = `orig-${uid}`;
   const renamed = `renamed-${uid}`;
   await page.getByPlaceholder('Add a task...').fill(original);

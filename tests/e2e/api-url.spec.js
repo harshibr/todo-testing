@@ -1,9 +1,10 @@
 import { test, expect } from '../helpers/fixtures.js';
+import { registerAndLogin } from '../helpers/auth.js';
 
 test('UI loads and saves todos through the configured API (same origin, or API_URL when the API is hosted separately)', async ({ page, uid }) => {
   const calls = [];
   page.on('request', (r) => { if (r.url().includes('/api/todos')) calls.push(new URL(r.url()).origin); });
-  await page.goto('/');
+  await registerAndLogin(page, { email: `u-${uid}@test.test` });
   const text = `api-url-${uid}`;
   await page.getByPlaceholder('Add a task...').fill(text);
   await page.getByRole('button', { name: 'Add', exact: true }).click();

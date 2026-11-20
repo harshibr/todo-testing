@@ -27,3 +27,12 @@ li .edit-desc { font-size: 14px; margin-top: 6px; }
 .empty { text-align: center; color: #9ca3af; }
 .clear { margin-top: 16px; background: #ef4444; }
 .clear:hover { background: #dc2626; }
+.auth-form { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.auth-form label { font-size: 14px; font-weight: 500; color: #374151; }
+.auth-error { margin: 0; font-size: 14px; color: #ef4444; }
+.auth-switch { background: transparent; color: #6b7280; font-size: 13px; font-weight: 400; padding: 4px 0; text-decoration: underline; }
+.auth-switch:hover { background: transparent; color: #374151; }
+.user-bar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 16px; font-size: 13px; color: #6b7280; }
+.user-email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+.logout { background: transparent; color: #6b7280; padding: 4px 10px; font-size: 13px; font-weight: 500; border: 1px solid #d1d5db; }
+.logout:hover { background: #f3f4f6; color: #111827; }
