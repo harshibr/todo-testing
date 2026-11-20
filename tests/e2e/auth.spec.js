@@ -118,3 +118,22 @@ test('each user sees only their own todos', async ({ page, uid }) => {
   await expect(page.getByText(todo1)).toHaveCount(0);
   await page.getByRole('button', { name: 'Logout' }).click();
 });
+
+test('email and logout button appear at the bottom of the page', async ({ page, uid }) => {
+  const email = `bottom-${uid}@test.test`;
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Create account' }).click();
+  await page.getByLabel('Email').fill(email);
+  await page.getByLabel('Password').fill('TestPass1!');
+  await page.getByRole('button', { name: 'Register' }).click();
+  await expect(page.getByPlaceholder('Add a task...')).toBeVisible();
+
+  const form = page.locator('form');
+  const userBar = page.locator('.user-bar');
+  const formBox = await form.boundingBox();
+  const userBarBox = await userBar.boundingBox();
+  expect(userBarBox.y).toBeGreaterThan(formBox.y);
+
+  await expect(page.locator('.user-bar .user-email')).toHaveText(email);
+  await expect(page.locator('.user-bar .logout')).toBeVisible();
+});

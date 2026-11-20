@@ -2,6 +2,8 @@
 # Guards the quality of what Claude changed (compares the working tree with HEAD):
 #  1. new behaviour must come with tests (source changed => a test file changed too)
 #  2. existing tests may be added to, never deleted, skipped or weakened
+#  3. new/changed tests must really check something: no tautologies, no test without an assertion, no swallowed errors,
+#     no fixed sleeps, no file whose only assertions are "something exists". A deliberate exception: put  // aidev:allow  on that line.
 # Override for pure docs/refactor work: AIDEV_ALLOW_NO_TESTS=1
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 require_project
@@ -45,6 +47,39 @@ asserts='(expect\(|assert[A-Za-z_.]*\(|assert )'
 rm_n=$(git diff "$BASE" -U0 -- $(echo "$changed" | grep -E "$TESTRE" | tr '\n' ' ') 2>/dev/null | grep -E '^-[^-]' | grep -cE "$asserts" || true)
 ad_n=$(echo "$added_lines" | grep -cE "$asserts" || true)
 [ "${rm_n:-0}" -gt "${ad_n:-0}" ] && { warn "assertions were removed ($rm_n removed, $ad_n added): fix the code, not the test"; bad=1; }
+# 3 quality of the tests themselves (only what this change adds or modifies)
+new_test_files=$( { git diff --name-only --diff-filter=AM "$BASE"; git ls-files --others --exclude-standard; } | sort -u | grep -E "$TESTRE" | grep -vE '(^|/)(helpers/fixtures\.js|playwright\.config\.js|package(-lock)?\.json)$' || true)
+q_bad=0
+if [ -n "$new_test_files" ]; then
+  qlines=$( { for f in $new_test_files; do
+      if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then git diff "$BASE" -U0 -- "$f" | grep -E '^\+[^+]' | sed 's/^+//'
+      else cat "$f"; fi
+    done; } 2>/dev/null | grep -v 'aidev:allow' || true )
+  chk() { # description, regex
+    local hits; hits=$(printf '%s\n' "$qlines" | grep -nE "$2" || true)
+    if [ -n "$hits" ]; then warn "$1"; echo "$hits" | head -5 | sed 's/^/   /' >&2; q_bad=1; fi
+  }
+  chk "tautology assertion (always true, proves nothing)" 'expect\((true|1)\)\.(toBe|toEqual|toStrictEqual)\((true|1)\)|expect\(true\)\.toBeTruthy\(\)|assert (True|1)$|assert\(true\)|assert\.ok\(true\)'
+  chk "empty catch / swallowed error in a test (hides failures)" 'catch *(\([^)]*\))? *\{ *\}|\.catch\(\(\) *=> *(\{ *\})?\)'
+  chk "fixed sleep (waitForTimeout / sleep): wait for a condition instead" 'waitForTimeout\(|time\.sleep\(|(^|[^a-zA-Z])sleep\([0-9]'
+  # (a condition on process.env is an intentional per-environment check and is allowed)
+  qlines_cond=$(printf '%s\n' "$qlines" | grep -v 'process\.env' || true)
+  hits=$(printf '%s\n' "$qlines_cond" | grep -nE '(^|[;{])[[:space:]]*if *\(.*\) *\{? *expect\(' || true)
+  if [ -n "$hits" ]; then warn "conditional assertion (if (...) expect): the check may silently never run"; echo "$hits" | head -5 | sed 's/^/   /' >&2; q_bad=1; fi
+  for f in $new_test_files; do
+    [ -f "$f" ] || continue
+    total=$(grep -cE "$asserts" "$f" || true)
+    weak=$(grep -cE 'toBeDefined\(\)|not\.toBeNull\(\)|not\.toBeUndefined\(\)' "$f" || true)
+    if [ "${total:-0}" -gt 0 ] && [ "${weak:-0}" -eq "${total:-0}" ]; then
+      warn "$f: every assertion only checks that something exists: assert the actual value or text"; q_bad=1
+    fi
+    case "$f" in *.js|*.ts|*.jsx|*.tsx|*.mjs)
+      tn=$(grep -cE '^[[:space:]]*(test|it)(\.[a-z]+)?\(' "$f" || true)
+      if [ "${tn:-0}" -gt "${total:-0}" ]; then warn "$f: $tn tests but only ${total:-0} assertions: some test checks nothing"; q_bad=1; fi ;;
+    esac
+  done
+fi
+[ "$q_bad" = 1 ] && { warn "Test quality: make the tests really prove the behaviour. Never silence the check."; bad=1; }
 # 1 tests required
 if [ -n "$src_changed" ] && [ -z "$tests_changed" ] && [ "${AIDEV_ALLOW_NO_TESTS:-0}" != 1 ]; then
   warn "Code changed but NO test was added or changed. Add test cases for the new behaviour:"

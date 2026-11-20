@@ -19,7 +19,7 @@ on:
 
 permissions:
   contents: read
-  deployments: read      # to see when Vercel has finished deploying a commit
+  deployments: read      # to see when the host (Vercel, Render ...) has finished deploying a commit
 
 jobs:
   test:
@@ -31,6 +31,7 @@ jobs:
     env:
       TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
       TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+      JWT_SECRET: "ci-test-secret-not-real"
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -71,13 +72,14 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SITE: ${{ vars.STAGING_URL }}
-      API: ${{ vars.STAGING_API_URL }}
+      API: ${{ vars.STAGING_API_URL }}      # optional: only when the API is hosted on a different address than the website
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      # Vercel and Render deploy by themselves when staging is pushed. We wait until BOTH run exactly this commit.
-      - name: Wait for the deploy (Vercel site + Render API run this commit)
+      # The host (Vercel, Render, Netlify ...) deploys by itself when this branch is pushed. We wait until it runs THIS commit.
+      # For a host with no GitHub integration, add your deploy command BEFORE this step (ssh, rsync, a CLI ...).
+      - name: Wait for the deploy to finish
         env: { GH_TOKEN: "${{ github.token }}" }
         run: bash .github/ci/wait-deploy.sh "$SITE" "$API" "${{ github.sha }}"
       - name: FULL tests on the real staging (API + browsers; staging data is disposable)
@@ -112,7 +114,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - name: Wait for the deploy (Vercel site + Render API run this commit)
+      - name: Wait for the deploy to finish
         env: { GH_TOKEN: "${{ github.token }}" }
         run: bash .github/ci/wait-deploy.sh "$SITE" "$API" "${{ github.sha }}"
       - name: READ-ONLY smoke tests on live (only tests tagged @smoke; they never change data)
@@ -133,4 +135,4 @@ jobs:
         with: { name: live-report, path: tests/playwright-report, if-no-files-found: ignore }
       - name: If live is broken
         if: failure()
-        run: echo "::error::Live smoke tests failed. Roll back now with scripts/release.sh rollback production (and redeploy the previous version in Vercel or Render if needed)."
+        run: echo "::error::Live smoke tests failed. Roll back now with scripts/release.sh rollback production, and redeploy the previous version in your host if needed."

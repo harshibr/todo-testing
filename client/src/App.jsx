@@ -117,10 +117,6 @@ export default function App() {
         <Auth onAuth={handleAuth} />
       ) : (
         <>
-          <div className="user-bar">
-            <span className="user-email">{user?.email}</span>
-            <button type="button" className="logout" onClick={logout}>Logout</button>
-          </div>
           <form onSubmit={addTodo}>
             <div className="fields">
               <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Add a task..." />
@@ -188,6 +184,10 @@ export default function App() {
             <button type="button" className="clear" onClick={clearCompleted}>Clear completed</button>
           )}
           {todos.length === 0 && <p className="empty">No tasks yet. Add your first one above.</p>}
+          <div className="user-bar">
+            <span className="user-email">{user?.email}</span>
+            <button type="button" className="logout" onClick={logout}>Logout</button>
+          </div>
         </>
       )}
     </div>
